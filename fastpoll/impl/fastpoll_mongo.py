@@ -131,7 +131,7 @@ class FastPollMongo(FastPollBase[ResultT]):
         now = datetime.now(UTC)
         await self.collection.update_one(
             {"_id": ObjectId(job_id), "status": "running"},
-            {"$set": {"locked_until": now + timedelta(self.HEARTBEAT_INTERVAL_SECONDS * 1.5)}},
+            {"$set": {"locked_until": now + timedelta(seconds=self.HEARTBEAT_INTERVAL_SECONDS * 2)}},
         )
 
     async def get_job_status(self, job_id: str) -> FPJobStatus[ResultT]:

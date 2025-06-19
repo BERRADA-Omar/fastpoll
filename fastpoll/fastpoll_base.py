@@ -8,7 +8,7 @@ from fastpoll.fastpoll_models import FPJobStatus, ResultT
 
 
 class FastPollBase(ABC, Generic[ResultT]):
-    HEARTBEAT_INTERVAL_SECONDS: int = 5
+    HEARTBEAT_INTERVAL_SECONDS: int = 15
     """FastPoll is a high level service for creating long-running, asynchronous functions that can be polled for results.
     Features:
     - Execute any function that is asynchronous

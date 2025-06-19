@@ -90,37 +90,80 @@ async def process(payload: dict, report_progress: ReportProgressFuncType) -> dic
 
 async def process_test_very_heavy_long_job(url: str, report_progress: ReportProgressFuncType) -> dict:
     """
-    Actually scrape a web page and perform some transformation with progress reporting.
-    The report_progress parameter is injected by FastPoll.
-    Expects payload to contain a 'url' key.
+    Scrape a web page, follow all found links, perform real network and parsing work, and report progress over at least 20 minutes.
     """
+    import hashlib
+    import math
+
     if not url:
         raise ValueError("Payload must contain a 'url' key.")
 
-    if report_progress:
-        await report_progress(10, f"Fetching URL: {url}")
-    async with httpx.AsyncClient(verify=False) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        html = response.text
+    visited = set()
+    all_links = set()
+    http_links = set()
+    step = 0
+    max_depth = 5  # How many levels of links to follow
+    max_links_per_page = 10  # Limit to avoid infinite crawling
+    max_total_links = 500  # Absolute max to avoid abuse
+    queue = [(url, 0)]
+    start_time = asyncio.get_event_loop().time()
+    fetch_count = 0
+
+    async with httpx.AsyncClient(verify=False, timeout=30) as client:
+        while queue and fetch_count < max_total_links:
+            current_url, depth = queue.pop(0)
+            if current_url in visited or depth > max_depth:
+                continue
+            visited.add(current_url)
+            step += 1
+            progress = min(99, int((step / max_total_links) * 100))
+            if report_progress:
+                await report_progress(progress, f"Fetching ({step}/{max_total_links}) {current_url} (depth {depth})")
+            try:
+                response = await client.get(current_url)
+                response.raise_for_status()
+                html = response.text
+            except Exception as e:
+                if report_progress:
+                    await report_progress(progress, f"Failed to fetch {current_url}: {e}")
+                continue
+            soup = BeautifulSoup(html, "html.parser")
+            links = [a["href"] for a in soup.find_all("a", href=True)]
+            # Normalize and filter links
+            norm_links = []
+            for l in links:
+                if l.startswith("/"):
+                    from urllib.parse import urljoin
+                    l = urljoin(current_url, l)
+                if l.startswith("http"):
+                    norm_links.append(l)
+            # Add to sets
+            all_links.update(norm_links)
+            http_links.update([l for l in norm_links if l.startswith("http")])
+            # Enqueue next level
+            for l in norm_links[:max_links_per_page]:
+                if l not in visited and len(queue) < max_total_links:
+                    queue.append((l, depth + 1))
+            fetch_count += 1
+            # Simulate heavy CPU work after each fetch
+            dummy = 0
+            for i in range(10**5, 10**5 + 20000):
+                dummy += int(hashlib.sha256(str(i).encode()).hexdigest(), 16) % 1000
+                dummy += int(math.sqrt(i))
+            # Pace the crawl to avoid hammering servers and ensure long runtime
+            await asyncio.sleep(10)
+            # If running too fast, add more sleep
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed < (step * 12):
+                await asyncio.sleep((step * 12) - elapsed)
 
     if report_progress:
-        await report_progress(40, "Parsing HTML content")
-    soup = BeautifulSoup(html, "html.parser")
-    # Example: extract all links
-    links = [a["href"] for a in soup.find_all("a", href=True)]
-
-    if report_progress:
-        await report_progress(70, f"Found {len(links)} links. Performing transformation.")
-    # Example transformation: filter only http(s) links and count them
-    http_links = [link for link in links if link.startswith("http")]
-    link_count = len(http_links)
-
-    if report_progress:
-        await report_progress(100, "Scraping and transformation complete.")
+        await report_progress(100, f"Crawling complete. Visited {len(visited)} pages, found {len(all_links)} links.")
     return {
         "url": url,
-        "total_links": len(links),
-        "http_links": http_links[:10],  # return only first 10 for brevity
-        "http_link_count": link_count,
+        "visited_pages": len(visited),
+        "total_links_found": len(all_links),
+        "http_links": list(http_links)[:10],
+        "http_link_count": len(http_links),
+        "note": f"Job followed links up to {max_depth} levels, max {max_total_links} pages, with real network and CPU work."
     }

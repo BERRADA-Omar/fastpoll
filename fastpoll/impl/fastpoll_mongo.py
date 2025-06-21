@@ -16,7 +16,9 @@ class FastPollMongo(FastPollBase[ResultT]):
     def __init__(
         self,
         collection: AsyncIOMotorCollection,
+        heartbeat_interval_seconds: int = 15,
     ):
+        super().__init__(heartbeat_interval_seconds=heartbeat_interval_seconds)
         self.collection = collection
 
     @classmethod
@@ -25,6 +27,8 @@ class FastPollMongo(FastPollBase[ResultT]):
         mongo_uri: str = "mongodb://localhost:27017",
         db_name: str = "jobsdb",
         collection_name: str = "jobs",
+        heartbeat_interval_seconds: int = 15,
+        **kwargs
     ) -> "FastPollMongo":
         """Create a new FastPollMongo instance."""
         client = AsyncIOMotorClient(mongo_uri)
@@ -35,13 +39,13 @@ class FastPollMongo(FastPollBase[ResultT]):
         await collection.create_index("status")
         await collection.create_index("locked_until")
 
-        return cls(collection)
+        return cls(collection, heartbeat_interval_seconds=heartbeat_interval_seconds)
 
     async def _create_job(self, func, *args, **kwargs) -> FPJobStatus[ResultT]:
         """Create a new job in MongoDB."""
         now = datetime.now(UTC)
 
-        # Serialize input arguments for logging
+        # Serialize input arguments for logging (Mongo-specific)
         try:
             import json
             def safe_serialize(obj):
@@ -76,7 +80,9 @@ class FastPollMongo(FastPollBase[ResultT]):
         # Update status to running
         await self.collection.update_one({"_id": result.inserted_id}, {"$set": {"status": "running"}})
 
-        return FPJobStatus[ResultT](id=str(result.inserted_id), **doc)
+        job_status = FPJobStatus[ResultT](id=str(result.inserted_id), **doc)
+        await self.on_job_created(job_status)
+        return job_status
 
     async def _complete_job(self, job_id: str, result: ResultT) -> None:
         """Mark a job as completed with the given result."""
@@ -93,6 +99,8 @@ class FastPollMongo(FastPollBase[ResultT]):
                 }
             },
         )
+        job_status = await self.get_job_status(job_id)
+        await self.on_job_completed(job_status)
 
     async def _fail_job(self, job_id: str, error: Exception) -> None:
         """Mark a job as failed with the given error."""
@@ -108,6 +116,8 @@ class FastPollMongo(FastPollBase[ResultT]):
                 }
             },
         )
+        job_status = await self.get_job_status(job_id)
+        await self.on_job_failed(job_status)
 
     async def _report_progress(self, job_id: str, progress: int, progress_info: Optional[str] = None) -> None:
         """Report the progress of a job."""

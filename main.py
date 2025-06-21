@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     # Initialize FastPollMongo during app startup
     global fast_poll
     fast_poll = await FastPollMongo.create(
-        HEARTBEAT_INTERVAL_SECONDS=10, mongo_uri=MONGO_URI, db_name=DB_NAME, collection_name=COLLECTION_NAME
+        heartbeat_interval_seconds=20, mongo_uri=MONGO_URI, db_name=DB_NAME, collection_name=COLLECTION_NAME
     )
     yield
 

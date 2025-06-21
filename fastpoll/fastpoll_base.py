@@ -8,7 +8,6 @@ from fastpoll.fastpoll_models import FPJobStatus, ResultT
 
 
 class FastPollBase(ABC, Generic[ResultT]):
-    HEARTBEAT_INTERVAL_SECONDS: int = 15
     """FastPoll is a high level service for creating long-running, asynchronous functions that can be polled for results.
     Features:
     - Execute any function that is asynchronous
@@ -24,8 +23,13 @@ class FastPollBase(ABC, Generic[ResultT]):
         raise NotImplementedError("Direct instantiation is not supported. Use 'await FastPollBase.create()'.")
 
     @classmethod
+    async def create(cls, HEARTBEAT_INTERVAL_SECONDS: int = 15, **kwargs) -> "FastPollBase":
+        cls.HEARTBEAT_INTERVAL_SECONDS = HEARTBEAT_INTERVAL_SECONDS
+        return await cls._create(**kwargs)
+    
+    @classmethod
     @abstractmethod
-    async def create(cls, **kwargs) -> "FastPollBase":
+    async def _create(cls, **kwargs) -> "FastPollBase":
         """
         Factory method to create an instance of FastPollBase.
         This method should be implemented by subclasses to provide the actual instantiation logic.

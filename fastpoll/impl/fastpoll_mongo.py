@@ -20,12 +20,11 @@ class FastPollMongo(FastPollBase[ResultT]):
         self.collection = collection
 
     @classmethod
-    async def create(
+    async def _create(
         cls,
         mongo_uri: str = "mongodb://localhost:27017",
         db_name: str = "jobsdb",
         collection_name: str = "jobs",
-        **kwargs,
     ) -> "FastPollMongo":
         """Create a new FastPollMongo instance."""
         client = AsyncIOMotorClient(mongo_uri)

@@ -28,12 +28,13 @@ class FastPollMongo(FastPollBase[ResultT]):
         db_name: str = "jobsdb",
         collection_name: str = "jobs",
         heartbeat_interval_seconds: int = 15,
+        mongo_collection: Optional[AsyncIOMotorCollection] = None,
         **kwargs
     ) -> "FastPollMongo":
         """Create a new FastPollMongo instance."""
         client = AsyncIOMotorClient(mongo_uri)
         db = client[db_name]
-        collection = db[collection_name]
+        collection = mongo_collection or db[collection_name]
 
         # Create indexes
         await collection.create_index("status")

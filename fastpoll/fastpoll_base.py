@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import asyncio
+import inspect
 from typing import Optional, Generic, Callable, Awaitable
 from fastpoll.fastpoll_models import FPJobStatus, ResultT
 
@@ -56,7 +57,7 @@ class FastPollBase(ABC, Generic[ResultT]):
         stop_event = asyncio.Event()
 
         init_job_status = await self._create_job(func, *args, **kwargs)
-        self.on_job_created(init_job_status)
+        await self.on_job_created(init_job_status)
         heartbeat_task = asyncio.create_task(self.extend_lock(job_id=init_job_status.id, stop_event=stop_event))
 
         async def report_progress(progress: int, progress_info: Optional[str] = None) -> None:
@@ -67,12 +68,16 @@ class FastPollBase(ABC, Generic[ResultT]):
 
         async def execute_job():
             try:
-                result = await func(*args, **kwargs, report_progress=report_progress)
+                sig = inspect.signature(func)
+                if 'report_progress' in sig.parameters:
+                    result = await func(*args, **kwargs, report_progress=report_progress)
+                else:
+                    result = await func(*args, **kwargs)
                 await self._complete_job(job_id=init_job_status.id, result=result)
-                self.on_job_completed(init_job_status)
+                await self.on_job_completed(init_job_status)
             except Exception as e:
                 await self._fail_job(job_id=init_job_status.id, error=e)
-                self.on_job_failed(init_job_status)
+                await self.on_job_failed(init_job_status)
             finally:
                 stop_event.set()
                 heartbeat_task.cancel()

@@ -104,9 +104,9 @@ async def process_test_very_heavy_long_job(url: str, report_progress: ReportProg
     all_links = set()
     http_links = set()
     step = 0
-    max_depth = 2  # How many levels of links to follow
-    max_links_per_page = 10  # Limit to avoid infinite crawling
-    max_total_links = 300  # Absolute max to avoid abuse
+    max_depth = 1  # How many levels of links to follow
+    max_links_per_page = 5  # Limit to avoid infinite crawling
+    max_total_links = 10  # Absolute max to avoid abuse
     queue = [(url, 0)]
     start_time = asyncio.get_event_loop().time()
     fetch_count = 0
